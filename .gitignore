@@ -1,0 +1,50 @@
+# Python
+__pycache__/
+*.pyc
+venv/
+.env
+
+# Database
+*.db
+*.db-shm
+*.db-wal
+
+# Node
+node_modules/
+web-ui/dist/
+web-ui/node_modules/
+.DS_Store
+
+# Logs & Output & Raw Data
+*.log
+output/
+*.csv
+*.txt
+*.json
+*.html
+*.png
+*.zip
+
+# User / Dev Scripts (Exclude by pattern)
+debug_*.py
+test_*.py
+inspect_*.py
+find_*.py
+fetch_*.py
+check_*.py
+verify_*.py
+analyze_*.py
+fix_*.py
+generate_list*.py
+extract_*.py
+identify_*.py
+repair_*.py
+
+# Backup
+bck/
+oracle/
+lists/
+
+# Misc
+*.bat
+*.sh
