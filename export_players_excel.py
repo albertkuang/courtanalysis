@@ -262,7 +262,7 @@ def get_history(conn, player_id):
     cols = [d[0] for d in c.description]
     return [dict(zip(cols, row)) for row in c.fetchall()]
 
-def get_filtered_players(conn, country, category, gender, count, name_filter, min_utr=0):
+def get_filtered_players(conn, country, category, gender, count, name_filter, min_utr=0, min_age=None, max_age=None):
     """Fetch players with SQL filtering."""
     c = conn.cursor()
     
@@ -285,15 +285,27 @@ def get_filtered_players(conn, country, category, gender, count, name_filter, mi
         query += " AND name LIKE ?"
         params.append(f"%{name_filter}%")
 
+    if min_age is not None:
+        query += " AND age >= ?"
+        params.append(min_age)
+
+    if max_age is not None:
+        query += " AND age <= ?"
+        params.append(max_age)
+
     # Category Filtering (Junior/Adult) logic
     if category == 'junior':
         # Include confirmed juniors (age <= 18) 
         # OR include if age_group suggests junior (e.g. U14, U16, U18, or ranges like 15-16)
-        # OR include if age is missing and UTR is < 14.0 (heuristic to exclude adult pros)
+        # OR include if age is missing and UTR is low (heuristic based on gender)
         query += """ AND ( 
             (age IS NOT NULL AND age <= 18) OR 
             (age_group IS NOT NULL AND (age_group LIKE 'U%' OR age_group LIKE '1_-1_' OR age_group LIKE '%Junior%')) OR
-            (age IS NULL AND age_group IS NULL AND utr_singles < 14.0)
+            (age IS NULL AND age_group IS NULL AND (
+                (gender = 'F' AND utr_singles < 11.5) OR
+                (gender = 'M' AND utr_singles < 13.5) OR
+                (gender IS NULL AND utr_singles < 13.0)
+            ))
         )"""
         
         # Heuristic: If age is missing to confirm, exclude those with active College (likely adults)
@@ -302,7 +314,17 @@ def get_filtered_players(conn, country, category, gender, count, name_filter, mi
         # Include confirmed college players (active college name is present)
         query += " AND (college IS NOT NULL AND college != '-' AND college NOT LIKE '%Recruiting%')"
     elif category == 'adult':
-        query += " AND (age IS NULL OR age > 18)"
+        # Exclude those captured by the Junior heuristic above
+        query += """ AND (
+            (age IS NOT NULL AND age > 18) OR
+            (age IS NULL AND (
+                age_group IS NULL AND NOT (
+                        (gender = 'F' AND utr_singles < 11.5) OR
+                        (gender = 'M' AND utr_singles < 13.5) OR
+                        (gender IS NULL AND utr_singles < 13.0)
+                )
+            ))
+        )"""
     
     query += " ORDER BY utr_singles DESC"
     
@@ -320,9 +342,9 @@ def get_filtered_players(conn, country, category, gender, count, name_filter, mi
 # ============================================
 # MAIN LOGIC (Refactored for API use)
 # ============================================
-def generate_excel_report(country, category='junior', gender=None, count=100, name_filter=None, min_utr=0, output_dir='output'):
+def generate_excel_report(country, category='junior', gender=None, count=100, name_filter=None, min_utr=0, min_age=None, max_age=None, output_dir='output'):
     print(f"Exporting data...")
-    print(f"Filters: Country={country}, Category={category}, Gender={gender or 'Any'}, Name={name_filter or 'Any'}, Count={count}, MinUTR={min_utr}")
+    print(f"Filters: Country={country}, Category={category}, Gender={gender or 'Any'}, Name={name_filter or 'Any'}, Count={count}, MinUTR={min_utr}, Age={min_age}-{max_age}")
     
     # Init DB to ensure migration happens if not already
     try:
@@ -333,7 +355,7 @@ def generate_excel_report(country, category='junior', gender=None, count=100, na
     conn.row_factory = sqlite3.Row
     
     # Get Players
-    players = get_filtered_players(conn, country, category, gender, count, name_filter, min_utr)
+    players = get_filtered_players(conn, country, category, gender, count, name_filter, min_utr, min_age, max_age)
     print(f"Found {len(players)} matched players.")
     
     if not players:
@@ -476,10 +498,17 @@ def main():
     parser.add_argument('--name', default='', help='Filter by partial name match')
 
     parser.add_argument('--min-utr', type=float, default=0, help='Minimum UTR')
+    parser.add_argument('--min-age', type=int, help='Minimum Age')
+    parser.add_argument('--max-age', type=int, help='Maximum Age')
+    parser.add_argument('--age', type=int, help='Exact Age (sets min and max)')
 
     args = parser.parse_args()
     
-    generate_excel_report(args.country, args.category, args.gender, args.count, args.name, args.min_utr)
+    if args.age:
+        args.min_age = args.age
+        args.max_age = args.age
+
+    generate_excel_report(args.country, args.category, args.gender, args.count, args.name, args.min_utr, args.min_age, args.max_age)
 
 if __name__ == "__main__":
     main()

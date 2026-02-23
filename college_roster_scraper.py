@@ -5,6 +5,7 @@ Searches for colleges by division (D1/D2/D3) and fetches team rosters with UTR m
 
 import requests
 import csv
+import json
 import sys
 import argparse
 import time
@@ -36,7 +37,7 @@ DIVISION_TERMS = {
 # LOGIN
 # ============================================
 def login():
-    print("Logging in to UTR...")
+    print(f"Logging in to UTR... as {CONFIG['email']}")
     
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0",
@@ -82,6 +83,8 @@ def find_college_by_name(auth_info, name, preferred_gender='M'):
     
     try:
         response = requests.get(COLLEGE_SEARCH_URL, params=params, headers=headers, cookies=auth_info.get('cookies'))
+        if response.status_code == 401:
+            raise Exception("Unauthorized")
         if response.status_code != 200:
             return None
             
@@ -105,6 +108,17 @@ def find_college_by_name(auth_info, name, preferred_gender='M'):
             m_id = target_hit.get('mensClubId')
             w_id = target_hit.get('womensClubId')
             
+            if not m_id or not w_id:
+                teams = target_hit.get('teams', [])
+                if isinstance(teams, list):
+                    for team in teams:
+                        t_gender = team.get('gender')
+                        t_id = team.get('id') or team.get('clubId')
+                        if t_gender == 'M' and not m_id:
+                            m_id = t_id
+                        elif t_gender == 'F' and not w_id:
+                            w_id = t_id
+
             # Select appropriate club ID
             club_id = target_hit.get('clubId') or target_hit.get('id') # Default
             if preferred_gender == 'M' and m_id:
@@ -160,6 +174,8 @@ def search_colleges(auth_info, division, limit=50):
         
         try:
             response = requests.get(COLLEGE_SEARCH_URL, params=params, headers=headers, cookies=auth_info.get('cookies'))
+            if response.status_code == 401:
+                raise Exception("Unauthorized")
             if response.status_code != 200:
                 print(f"Search failed: {response.status_code}")
                 break
@@ -190,16 +206,53 @@ def search_colleges(auth_info, division, limit=50):
                 # Actually get_roster takes a club_id. 
                 # Let's try to grab the gender-specific one here if we can.
                 
-                # Correction: The search result 'source' has mensClubId and womensClubId directly.
+                # Try to extract gender-specific club IDs and power ratings
+                m_id = source.get('mensClubId')
+                w_id = source.get('womensClubId')
+                m_power = None
+                w_power = None
+                
+                # Check activeRosters for more detailed info
+                active_rosters = source.get('activeRosters', []) or []
+                for roster in active_rosters:
+                    club_data = roster.get('club') or {}
+                    rtype = club_data.get('subType')
+                    cid = club_data.get('id')
+                    
+                    p6_data = roster.get('power6') or {}
+                    p6 = p6_data.get('power6Rating')
+                    
+                    if rtype == 'mens':
+                        if not m_id: m_id = cid
+                        m_power = p6
+                    elif rtype == 'womens':
+                        if not w_id: w_id = cid
+                        w_power = p6
+
+                if not m_id or not w_id:
+                    teams = source.get('teams', [])
+                    if isinstance(teams, list):
+                        for team in teams:
+                            t_gender = team.get('gender')
+                            t_id = team.get('id') or team.get('clubId')
+                            if t_gender == 'M' and not m_id:
+                                m_id = t_id
+                            elif t_gender == 'F' and not w_id:
+                                w_id = t_id
+                
                 club_id = source.get('clubId') or source.get('id')
+                location = (source.get('location') or {}).get('display') or source.get('city') or 'USA'
                 
                 colleges.append({
                     'name': col_name,
                     'id': col_id,
-                    'clubId': club_id, # get_roster might need to refine this based on gender
-                    'mensClubId': source.get('mensClubId'),
-                    'womensClubId': source.get('womensClubId'),
-                    'division': short_name or division
+                    'clubId': club_id, 
+                    'mensClubId': m_id,
+                    'womensClubId': w_id,
+                    'mensPowerRating': m_power,
+                    'womensPowerRating': w_power,
+                    'division': short_name or division,
+                    'location': location
                 })
                 
                 if len(colleges) >= limit:
@@ -214,6 +267,28 @@ def search_colleges(auth_info, division, limit=50):
     print(f"Found {len(colleges)} colleges.")
     return colleges
 
+def get_precise_player_data(auth_info, player_id):
+    """Fetch precise UTR from player profile API."""
+    headers = {}
+    if auth_info.get('token'):
+        headers['Authorization'] = f"Bearer {auth_info['token']}"
+    
+    try:
+        url = f"https://app.utrsports.net/api/v2/player/{player_id}"
+        res = requests.get(url, headers=headers, cookies=auth_info.get('cookies'), timeout=5)
+        if res.status_code == 200:
+            data = res.json()
+            return {
+                'id': player_id,
+                'utr': data.get('singlesUtr') or data.get('myUtrSingles'),
+                'doublesUtr': data.get('doublesUtr') or data.get('myUtrDoubles'),
+                'nationality': data.get('nationality'),
+                'location': (data.get('location') or {}).get('display')
+            }
+    except:
+        pass
+    return None
+
 # ============================================
 # GET ROSTER
 # ============================================
@@ -226,84 +301,152 @@ def get_college_roster(auth_info, club_id, gender):
     if auth_info.get('token'):
         headers['Authorization'] = f"Bearer {auth_info['token']}"
         
-    params = {
-        'top': 100, # Large enough to catch potential members
-        'skip': 0,
-        'gender': 'M' if gender == 'M' else 'F',
-        'utrType': 'verified',
-        'clubId': club_id
-    }
+    roster = []
+    skip = 0
+    batch_size = 100
+    from datetime import datetime
+    current_year = datetime.now().year # 2026 for current season
+    total_hits = 0
     
-    try:
-        response = requests.get("https://app.utrsports.net/api/v2/search/players", params=params, headers=headers, cookies=auth_info.get('cookies'))
-        if response.status_code != 200:
-            return []
-            
-        data = response.json()
-        hits = data.get('hits', [])
+    while True:
+        params = {
+            'top': batch_size,
+            'skip': skip,
+            'gender': 'M' if gender == 'M' else 'F',
+            'utrType': 'verified',
+            'clubId': club_id
+        }
         
-        roster = []
-        target_gender = 'Male' if gender == 'M' else 'F'
-        current_year = 2025 # 2024-25 season seniors graduate 2025
-        
-        for hit in hits:
-            m = hit.get('source', hit)
+        try:
+            response = requests.get("https://app.utrsports.net/api/v2/search/players", params=params, headers=headers, cookies=auth_info.get('cookies'))
+            if response.status_code == 401:
+                raise Exception("Unauthorized")
+            if response.status_code != 200:
+                break
+                
+            data = response.json()
+            hits = data.get('hits', [])
+            total_hits += len(hits)
             
-            # 1. Filtering for active collegiate roster
-            # Active players MUST have playerCollegeDetails or a gradYear in the future
-            col_details = m.get('playerCollegeDetails')
-            is_active = False
+            if not hits:
+                break
             
-            if col_details:
-                # If they have details, they are almost certainly active/committed
-                # We check gradYear if available to filter out extremely old ones (though usually they are removed)
-                gy_str = col_details.get('gradYear')
-                if gy_str:
-                    try:
-                        gy = int(gy_str.split('-')[0])
-                        if gy >= current_year:
+            for hit in hits:
+                m = hit.get('source', hit)
+                
+                # Get UTR and fallback to threeMonthRating if needed
+                utr = m.get('singlesUtr', 0) or 0
+                if utr == 0:
+                    utr = m.get('threeMonthRating', 0) or 0
+                
+                d_utr = m.get('doublesUtr', 0) or 0
+                if d_utr == 0:
+                    # No obvious doubles fallback in same way, but sometimes doublesRating is there
+                    d_utr = m.get('doublesRating', 0) or 0
+
+                # 1. Filtering for active collegiate roster
+                # Active players MUST have playerCollegeDetails or a gradYear in the future
+                col_details = m.get('playerCollegeDetails')
+                grad_year = m.get('gradYear') 
+                is_active = False
+                
+                if col_details:
+                    # If they have details, they are almost certainly active/committed
+                    # We check gradYear if available to filter out extremely old ones
+                    gy_str = col_details.get('gradYear')
+                    g_class = col_details.get('gradClassName')
+                    
+                    if gy_str:
+                        try:
+                            # Handle ISO date strings
+                            gy = int(str(gy_str).split('-')[0])
+                            if gy >= current_year:
+                                is_active = True
+                                # If class name is something like "Senior", use it. 
+                                # Otherwise default to the year.
+                                if g_class and not g_class.startswith("'"):
+                                    grad_year = g_class
+                                else:
+                                    grad_year = gy
+                        except:
                             is_active = True
-                    except:
+                            if g_class: grad_year = g_class
+                    elif g_class:
                         is_active = True
-                else:
-                    is_active = True
+                        grad_year = g_class
+                    else:
+                        is_active = True
+                
+                # Additional heuristic: If no details but root gradYear is reasonably future
+                if not is_active and grad_year:
+                    try:
+                        gy = int(grad_year)
+                        if current_year <= gy <= current_year + 5:
+                            is_active = True
+                            grad_year = gy
+                    except: pass
+
+                # If still not active, check if they are simply on the roster without grad year (less reliable but needed)
+                # Some players don't have gradYear set properly
+                if not is_active:
+                     # Relaxed active check: if they have a UTR and are in the club list, maybe include them?
+                     # For now, stick to logic but maybe fallback if list is empty?
+                     curr_school = m.get('school', '')
+                     
+                     # NEW LOGIC: If they have a valid UTR > 0, and are associated with this club search, assume active.
+                     if utr > 0 or d_utr > 0:
+                        is_active = True
+                     
+                     if not is_active: 
+                        continue
+
+                # 3. Final UTR Check
+                if utr == 0 and d_utr == 0:
+                    continue
+
+                # Basic player info
+                roster.append({
+                    'id': m.get('id'),
+                    'name': m.get('displayName') or f"{m.get('firstName')} {m.get('lastName')}",
+                    'gradYear': grad_year,
+                    'utr': utr,
+                    'doublesUtr': d_utr,
+                    'gender': gender,
+                    'nationality': m.get('nationality')
+                })
             
-            # Additional heuristic: If no details but gradYear is reasonably future
-            # But be careful, many high schoolers have gradYear 2026/27 but aren't in college yet.
-            # However, if they are in a college CLUB roster, and have gradYear 2025/26/27/28, they are likely the players.
-            grad_year = m.get('gradYear')
-            if not is_active and grad_year:
+            if len(hits) < batch_size:
+                break
+                
+            skip += batch_size
+            time.sleep(0.1)
+            
+        except Exception as e:
+            print(f"Error fetching page for {club_id}: {e}")
+            break
+            
+    print(f"Roster fetch for {club_id}: Found {len(roster)} players (Total hits: {total_hits})")
+    # ENHANCE: Fetch precise ratings in parallel for the final roster
+    if roster:
+        print(f"Fetching precise ratings for {len(roster)} players...")
+        with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+            future_to_player = {executor.submit(get_precise_player_data, auth_info, p['id']): p for p in roster}
+            for future in concurrent.futures.as_completed(future_to_player):
+                p = future_to_player[future]
                 try:
-                    gy = int(grad_year)
-                    if current_year <= gy <= current_year + 4:
-                        is_active = True
-                except: pass
+                    precise = future.result()
+                    if precise:
+                        if precise.get('utr') is not None: p['utr'] = precise['utr']
+                        if precise.get('doublesUtr') is not None: p['doublesUtr'] = precise['doublesUtr']
+                        if precise.get('nationality'): p['nationality'] = precise['nationality']
+                        # Add precise location if available
+                        if precise.get('location'): p['location'] = precise['location']
+                except:
+                    pass
+    
+    return roster
 
-            if not is_active:
-                continue
 
-            # 3. UTR Check - Real roster players have ratings
-            utr = m.get('singlesUtr', 0) or 0
-            d_utr = m.get('doublesUtr', 0) or 0
-            
-            if utr == 0 and d_utr == 0:
-                continue
-
-            # Basic player info
-            roster.append({
-                'id': m.get('id'),
-                'name': m.get('displayName') or f"{m.get('firstName')} {m.get('lastName')}",
-                'gradYear': grad_year,
-                'utr': utr,
-                'doublesUtr': d_utr,
-                'gender': gender
-            })
-            
-        return roster
-
-    except Exception as e:
-        print(f"Error fetching roster for call {club_id}: {e}")
-        return []
 
 # ============================================
 # EXTRACT & FETCH DETAILED METRICS
@@ -395,6 +538,8 @@ def fetch_player_metrics(auth_info, player_basic):
             except: 
                 break
                 
+            if resp_res.status_code == 401:
+                raise Exception("Unauthorized")
             if resp_res.status_code != 200: break
             
             r_data = resp_res.json()

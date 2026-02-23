@@ -18,9 +18,12 @@ web-ui/node_modules/
 # Logs & Output & Raw Data
 *.log
 output/
+scrape_output/
 *.csv
 *.txt
 *.json
+*.jsonl
+*.pt
 *.html
 *.png
 *.zip
@@ -39,6 +42,15 @@ generate_list*.py
 extract_*.py
 identify_*.py
 repair_*.py
+try_*.py
+audit_*.py
+benchmark_*.py
+diagnose_*.py
+discover_*.py
+probe_*.py
+quick_*.py
+search_*.py
+read_*.py
 
 # Backup
 bck/
@@ -48,3 +60,4 @@ lists/
 # Misc
 *.bat
 *.sh
+*.mp4

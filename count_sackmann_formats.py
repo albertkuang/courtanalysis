@@ -1,0 +1,10 @@
+import sqlite3
+conn = sqlite3.connect('tennis_data.db')
+c = conn.cursor()
+c.execute("SELECT COUNT(*) FROM players WHERE player_id LIKE 'sackmann-atp-%'")
+print(f"sackmann-atp count: {c.fetchone()[0]}")
+c.execute("SELECT COUNT(*) FROM players WHERE player_id LIKE 'sackmann-wta-%'")
+print(f"sackmann-wta count: {c.fetchone()[0]}")
+c.execute("SELECT COUNT(*) FROM players WHERE player_id LIKE 'sackmann_%'")
+print(f"sackmann_ count: {c.fetchone()[0]}")
+conn.close()
