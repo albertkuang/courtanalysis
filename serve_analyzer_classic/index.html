@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Serve Analyzer - NeuraSkill Pro</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700;800;900&family=Inter:wght@400;500;600&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <link rel="icon" href="data:,">
+    <!-- MediaPipe Pose -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js"
+        crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"
+        crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+
+<body>
+    <div class="container">
+        <header>
+            <div class="header-content">
+                <h1>NeuraSkill <span class="badge">PRO</span></h1>
+                <p>Instantly Expose Hidden 0.14-Second Flaws Killing Your Serve</p>
+                <div style="margin-top: 10px; display: flex; gap: 15px;">
+                    <a href="METHODOLOGY.md" target="_blank"
+                        style="color: var(--primary); text-decoration: none; font-size: 0.85rem; font-weight: 600; background: rgba(88, 166, 255, 0.1); padding: 4px 12px; border-radius: 4px; border: 1px solid rgba(88, 166, 255, 0.2);">View
+                        Science & Methodology</a>
+                </div>
+            </div>
+            <div class="comparison-mode-toggle">
+                <label class="switch">
+                    <input type="checkbox" id="comparisonToggle">
+                    <span class="slider round"></span>
+                </label>
+                <span style="font-weight: 600;">Comparison Mode</span>
+            </div>
+        </header>
+
+        <main class="dashboard" id="mainDashboard">
+            <!-- Left Side: Videos and Controls -->
+            <div class="video-section">
+                <div class="video-grid" id="videoGrid">
+                    <div class="video-item" id="videoItemA">
+                        <div class="upload-area" id="uploadArea">
+                            <div class="upload-icon">
+                                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                    stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                    <polyline points="17 8 12 3 7 8"></polyline>
+                                    <line x1="12" y1="3" x2="12" y2="15"></line>
+                                </svg>
+                            </div>
+                            <p id="uploadTextA">Upload Serve A (Pro Baseline)</p>
+                            <span class="upload-subtext">Supports MP4, M4V format</span>
+                            <input type="file" id="videoUpload" accept="video/mp4,video/x-m4v,video/*">
+                        </div>
+
+                        <div class="player-wrapper" id="playerWrapper" style="display: none;">
+                            <button class="change-video-btn" id="changeVideoA">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                    stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                    <polyline points="17 8 12 3 7 8"></polyline>
+                                    <line x1="12" y1="3" x2="12" y2="15"></line>
+                                </svg>
+                                Change Video
+                            </button>
+                            <video id="inputVideo" playsinline></video>
+                            <canvas id="outputCanvas"></canvas>
+                            <div class="video-label">SERVE A (PRO)</div>
+                        </div>
+                    </div>
+
+                    <div class="video-item" id="videoItemB" style="display: none;">
+                        <div class="upload-area" id="uploadAreaB">
+                            <div class="upload-icon">
+                                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                    stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                    <polyline points="17 8 12 3 7 8"></polyline>
+                                    <line x1="12" y1="3" x2="12" y2="15"></line>
+                                </svg>
+                            </div>
+                            <p>Upload Serve B (User Comparison)</p>
+                            <span class="upload-subtext">Supports MP4, M4V format</span>
+                            <input type="file" id="videoUploadB" accept="video/mp4,video/x-m4v,video/*">
+                        </div>
+
+                        <div class="player-wrapper" id="playerWrapperB" style="display: none;">
+                            <button class="change-video-btn" id="changeVideoB">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                    stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                    <polyline points="17 8 12 3 7 8"></polyline>
+                                    <line x1="12" y1="3" x2="12" y2="15"></line>
+                                </svg>
+                                Change Video
+                            </button>
+                            <video id="inputVideoB" playsinline></video>
+                            <canvas id="outputCanvasB"></canvas>
+                            <div class="video-label">SERVE B (USER)</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="playback-controls" id="playbackControls" style="display: none;">
+                    <button id="playBtn" class="btn">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                        </svg>
+                        Play
+                    </button>
+                    <button id="syncBtn" class="btn btn-secondary"
+                        style="display: none; background: rgba(88, 166, 255, 0.15); color: #58a6ff; border: 1px solid rgba(88, 166, 255, 0.3);">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M1 4h6V1"></path>
+                            <path d="M23 20h-6v3"></path>
+                            <path d="M22 12A10 10 0 0 0 3.2 7"></path>
+                            <path d="M2 12a10 10 0 0 0 18.8 5"></path>
+                        </svg>
+                        Sync Impacts
+                    </button>
+                    <input type="range" id="progressBar" value="0" min="0" max="100" step="0.1">
+                    <span id="timeDisplay">0:00 / 0:00</span>
+                </div>
+            </div>
+
+            <!-- Right Side: Metrics -->
+            <aside class="metrics-panel">
+                <div class="metrics-header">
+                    <h2>Live Biomechanics</h2>
+                    <div class="level-selector">
+                        <select id="targetLevel">
+                            <option value="pro">Pro (ATP/WTA)</option>
+                            <option value="junior">ITF Junior (Top 200)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="metric-card">
+                    <div class="metric-header">
+                        <h3>Shoulder Abduction</h3>
+                        <span class="flaw-badge">Check 1</span>
+                    </div>
+                    <div class="value" id="shoulderAngle">--°</div>
+                    <div class="progress-bar">
+                        <div class="fill" id="shoulderFill" style="width: 0%"></div>
+                    </div>
+                    <p class="target">Ideal Target: <span id="target-shoulder">90° - 110°</span></p>
+                    <div class="flaw-warning">Avoid lowering elbow below 90°</div>
+                </div>
+
+                <div class="metric-card">
+                    <div class="metric-header">
+                        <h3>Elbow Flexion (Trophy)</h3>
+                        <span class="flaw-badge">Check 2</span>
+                    </div>
+                    <div class="value" id="elbowAngle">--°</div>
+                    <div class="progress-bar">
+                        <div class="fill" id="elbowFill" style="width: 0%"></div>
+                    </div>
+                    <p class="target">Ideal Target: <span id="target-elbow">70° - 100°</span></p>
+                    <div class="flaw-warning">Keep within optimal torque range</div>
+                </div>
+
+                <div class="metric-card">
+                    <div class="metric-header">
+                        <h3>Knee Bend</h3>
+                        <span class="flaw-badge">Check 3</span>
+                    </div>
+                    <div class="value" id="kneeAngle">--°</div>
+                    <div class="progress-bar">
+                        <div class="fill" id="kneeFill" style="width: 0%"></div>
+                    </div>
+                    <p class="target">Ideal Target: <span id="target-knee">110° - 140°</span></p>
+                    <div class="flaw-warning">Crucial load phase for leg drive</div>
+                </div>
+
+                <div class="metric-card">
+                    <div class="metric-header">
+                        <h3>Racket Drop Depth</h3>
+                        <span class="flaw-badge">Check 4</span>
+                    </div>
+                    <div class="value" id="racketDrop">--°</div>
+                    <div class="progress-bar">
+                        <div class="fill" id="racketDropFill" style="width: 0%"></div>
+                    </div>
+                    <p class="target">Ideal Target: <span id="target-racketDrop">&lt; 100°</span></p>
+                    <div class="flaw-warning">Fuel for high-speed pronation</div>
+                </div>
+
+                <div class="metric-card">
+                    <div class="metric-header">
+                        <h3>Pronation Snap</h3>
+                        <span class="flaw-badge">Check 5</span>
+                    </div>
+                    <div class="value" id="pronationSnap">--%</div>
+                    <div class="progress-bar">
+                        <div class="fill" id="pronationFill" style="width: 0%"></div>
+                    </div>
+                    <p class="target">Target: <span id="target-pronation">High Velocity Flick</span></p>
+                    <div class="flaw-warning">Internal rotation speed index</div>
+                </div>
+
+                <div class="metric-card x-factor-card">
+                    <div class="metric-header">
+                        <h3>X-Factor Separation</h3>
+                        <span class="flaw-badge">Power</span>
+                    </div>
+                    <div class="value" id="xFactorAngle">--°</div>
+                    <div class="progress-bar">
+                        <div class="fill" id="xFactorFill" style="width: 0%"></div>
+                    </div>
+                    <p class="target">Ideal Target: <span id="target-xfactor">30° - 50°</span></p>
+                    <div class="flaw-warning">Hip vs Shoulder rotation depth</div>
+                </div>
+
+                <div class="metric-card launch-card">
+                    <div class="metric-header">
+                        <h3>Vertical Explosion</h3>
+                        <span class="flaw-badge">Jump</span>
+                    </div>
+                    <div class="value" id="jumpHeight">-- in</div>
+                    <div class="progress-bar">
+                        <div class="fill" id="jumpFill" style="width: 0%"></div>
+                    </div>
+                    <p class="target">Target: <span id="target-jump">Max Elevation</span></p>
+                    <div class="flaw-warning">Inches off the ground at launch</div>
+                </div>
+
+                <div class="metric-card drift-card">
+                    <div class="metric-header">
+                        <h3>Court Penetration</h3>
+                        <span class="flaw-badge">Drift</span>
+                    </div>
+                    <div class="value" id="courtDrift">-- ft</div>
+                    <div class="progress-bar">
+                        <div class="fill" id="driftFill" style="width: 0%"></div>
+                    </div>
+                    <p class="target">Target: <span id="target-drift">Forward Momentum</span></p>
+                    <div class="flaw-warning">Distance jumped into the court</div>
+                </div>
+
+                <div id="loadingStatus" class="status-msg">
+                    <svg class="spinner" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                        stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 12a9 9 0 1 1-6.219-8.56"></path>
+                    </svg>
+                    Initializing AI Models...
+                </div>
+            </aside>
+        </main>
+
+        <section class="action-plan-container" id="actionPlanContainer" style="display: none;">
+            <div class="plan-header">
+                <div class="header-main">
+                    <h2>Serve Action Plan & Assessment</h2>
+                    <span id="assessmentLevel" class="level-label-small">PRO LEVEL</span>
+                </div>
+                <div class="score-badge" id="overallScore">Analyzing...</div>
+            </div>
+
+            <div class="plan-content">
+                <div class="flaws-section">
+                    <h3>Identified 0.14-Second Flaws</h3>
+                    <ul class="flaw-list" id="flawList">
+                        <!-- Flaws will be injected here via JS -->
+                    </ul>
+                </div>
+
+                <div class="training-section">
+                    <h3>Short-Term Training Plan</h3>
+                    <div class="training-steps" id="trainingPlan">
+                        <!-- Training steps will be injected here via JS -->
+                    </div>
+                </div>
+
+                <div class="velocity-graph-section"
+                    style="margin-top: 2rem; border-top: 1px solid var(--border); padding-top: 2rem;">
+                    <h3>Kinetic Chain Velocity</h3>
+                    <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 1.5rem;">Real-time wrist
+                        acceleration profile tracking hand speed into impact.</p>
+                    <div class="chart-container"
+                        style="position: relative; height:350px; width:100%; background: rgba(0,0,0,0.2); border-radius: 12px; padding: 1.5rem; border: 1px solid var(--border);">
+                        <canvas id="velocityChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <footer
+        style="margin-top: 4rem; padding: 2rem; border-top: 1px solid var(--border); text-align: center; color: var(--text-secondary); font-size: 0.85rem;">
+        <p>© 2026 NeuraSkill Pro • Powered by MediaPipe 3D Pose Biomechanics</p>
+        <p style="margin-top: 5px;">Validated against ATP/WTA High-Speed Video Benchmarks</p>
+    </footer>
+
+    <script src="app.js"></script>
+</body>
+
+</html>
