@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>NeuraSkill Serve</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;800;900&family=Inter:wght@400;500;600&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+
+    <!-- MediaPipe Pose -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js"
+        crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"
+        crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
+</head>
+
+<body>
+    <header class="app-header">
+        <h1>NeuraSkill <span>PRO</span></h1>
+        <div class="level-selector">
+            <select id="targetLevel">
+                <option value="pro">Pro</option>
+                <option value="junior">Junior</option>
+            </select>
+        </div>
+    </header>
+
+    <main class="app-content">
+        <!-- 1. The massive CTA button to open camera -->
+        <div class="upload-container" id="uploadContainer">
+            <div class="camera-btn" id="cameraBtn">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
+                    <circle cx="12" cy="13" r="4"></circle>
+                </svg>
+                <span>Record Serve</span>
+            </div>
+            <!-- Native Android Camera Hook A -->
+            <input type="file" id="videoUpload" accept="video/*" capture="environment">
+            <p class="upload-hint" id="uploadTextA">Ensure full body is visible from the side or rear-45 angle.</p>
+
+            <div class="comparison-toggle-container" style="margin-top: 20px;">
+                <label class="switch-input">
+                    <input type="checkbox" id="comparisonToggle">
+                    <span class="slider"></span>
+                </label>
+                <span style="margin-left: 10px; font-weight: 600;">Enable Dual Comparison</span>
+            </div>
+
+            <!-- Upload Area B (Hidden by default) -->
+            <div class="upload-area-b" id="uploadAreaB" style="display: none; margin-top: 30px; text-align: center;">
+                <label for="videoUploadB" class="secondary-btn" style="display: inline-block; cursor: pointer;">
+                    Upload Serve B (Your video)
+                </label>
+                <input type="file" id="videoUploadB" accept="video/*" capture="environment" style="display: none;">
+            </div>
+        </div>
+
+        <!-- 2. The Video Player (Hidden until recorded) -->
+        <div class="player-wrapper" id="playerWrapper" style="display: none;">
+            <div class="video-grid" id="videoGrid">
+                <div class="video-container" id="videoItemA">
+                    <video id="inputVideo" playsinline></video>
+                    <canvas id="outputCanvas"></canvas>
+                </div>
+                <!-- Video B Container -->
+                <div class="video-container" id="videoItemB" style="display: none;">
+                    <video id="inputVideoB" playsinline></video>
+                    <canvas id="outputCanvasB"></canvas>
+                </div>
+            </div>
+            <div class="playback-controls">
+                <button id="analyzeBtn" class="primary-btn">Analyze Serve</button>
+                <button id="retakeBtn" class="secondary-btn">Retake</button>
+            </div>
+            <div id="loadingStatus" class="status-msg" style="display: none;">
+                <div class="spinner"></div>
+                <span id="statusText">Initializing AI...</span>
+                <div class="progress-bar-container" style="display:none; width: 100%; margin-top: 10px;">
+                    <div class="progress-bar-fill" id="progressBar"
+                        style="width: 0%; height: 6px; background: #ff6a33; border-radius: 3px;"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 3. The Action Plan (Hidden until analyzed) -->
+        <div class="results-container" id="resultsContainer" style="display: none;">
+            <div class="results-header">
+                <h2>Serve Analysis</h2>
+                <div class="score-badge" id="overallScore">Complete</div>
+            </div>
+
+            <!-- Scrollable Metrics Stack -->
+            <div class="metrics-stack">
+                <!-- Card 1: Shoulder -->
+                <div class="metric-card">
+                    <div class="card-header">
+                        <span class="checkpoint">CHK 1</span>
+                        <h3>Shoulder Abduction</h3>
+                    </div>
+                    <div class="card-body">
+                        <div class="value-large" id="shoulderAngle">--°</div>
+                        <div class="target-bar">
+                            <div class="fill" id="shoulderFill" style="width: 0%"></div>
+                        </div>
+                        <div class="target-text">Target: <span id="target-shoulder">90° - 110°</span></div>
+                    </div>
+                </div>
+
+                <!-- Card 2: Elbow -->
+                <div class="metric-card">
+                    <div class="card-header">
+                        <span class="checkpoint">CHK 2</span>
+                        <h3>Elbow Flexion</h3>
+                    </div>
+                    <div class="card-body">
+                        <div class="value-large" id="elbowAngle">--°</div>
+                        <div class="target-bar">
+                            <div class="fill" id="elbowFill" style="width: 0%"></div>
+                        </div>
+                        <div class="target-text">Target: <span id="target-elbow">70° - 100°</span></div>
+                    </div>
+                </div>
+
+                <!-- Card 3: Knee -->
+                <div class="metric-card">
+                    <div class="card-header">
+                        <span class="checkpoint">CHK 3</span>
+                        <h3>Knee Bend</h3>
+                    </div>
+                    <div class="card-body">
+                        <div class="value-large" id="kneeAngle">--°</div>
+                        <div class="target-bar">
+                            <div class="fill" id="kneeFill" style="width: 0%"></div>
+                        </div>
+                        <div class="target-text">Target: <span id="target-knee">110° - 140°</span></div>
+                    </div>
+                </div>
+
+                <!-- Card 4: Racket Drop -->
+                <div class="metric-card">
+                    <div class="card-header">
+                        <span class="checkpoint">CHK 4</span>
+                        <h3>Max Racket Drop</h3>
+                    </div>
+                    <div class="card-body">
+                        <div class="value-large" id="racketDrop">--°</div>
+                        <div class="target-bar">
+                            <div class="fill" id="racketDropFill" style="width: 0%"></div>
+                        </div>
+                        <div class="target-text">Target: <span id="target-racketDrop">&lt; 100°</span></div>
+                    </div>
+                </div>
+
+                <!-- Card 5: Pronation -->
+                <div class="metric-card">
+                    <div class="card-header">
+                        <span class="checkpoint">CHK 5</span>
+                        <h3>Pronation Snap</h3>
+                    </div>
+                    <div class="card-body">
+                        <div class="value-large" id="pronationSnap">--%</div>
+                        <div class="target-bar">
+                            <div class="fill" id="pronationFill" style="width: 0%"></div>
+                        </div>
+                        <div class="target-text">Target: <span id="target-pronation">High Velocity</span></div>
+                    </div>
+                </div>
+
+                <!-- Card 6: X-Factor -->
+                <div class="metric-card x-factor">
+                    <div class="card-header">
+                        <span class="checkpoint power">PWR</span>
+                        <h3>X-Factor Coil</h3>
+                    </div>
+                    <div class="card-body">
+                        <div class="value-large" id="xFactorAngle">--°</div>
+                        <div class="target-bar">
+                            <div class="fill" id="xFactorFill" style="width: 0%"></div>
+                        </div>
+                        <div class="target-text">Target: <span id="target-xfactor">30° - 50°</span></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flaws-list">
+                <h3>Detected Flaws & Analysis</h3>
+                <ul id="flawList"></ul>
+            </div>
+
+            <!-- Snapshot Gallery -->
+            <div id="actionPlanContainer" style="margin-top: 20px;"></div>
+
+            <button class="primary-btn outline" id="newServeBtn" style="margin-top: 20px; width: 100%;">Record New
+                Serve</button>
+        </div>
+    </main>
+
+    <script src="app.js"></script>
+</body>
+
+</html>
