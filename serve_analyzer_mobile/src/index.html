@@ -44,11 +44,11 @@
                 <span>Record Serve</span>
             </div>
             <!-- Native Android Camera Hook A -->
-            <input type="file" id="videoUpload" accept="video/*" capture="environment">
+            <input type="file" id="videoUpload" accept="video/*">
             <p class="upload-hint" id="uploadTextA">Ensure full body is visible from the side or rear-45 angle.</p>
 
             <div class="comparison-toggle-container" style="margin-top: 20px;">
-                <label class="switch-input">
+                <label class="switch-input" for="comparisonToggle">
                     <input type="checkbox" id="comparisonToggle">
                     <span class="slider"></span>
                 </label>
@@ -60,7 +60,7 @@
                 <label for="videoUploadB" class="secondary-btn" style="display: inline-block; cursor: pointer;">
                     Upload Serve B (Your video)
                 </label>
-                <input type="file" id="videoUploadB" accept="video/*" capture="environment" style="display: none;">
+                <input type="file" id="videoUploadB" accept="video/*" style="display: none;">
             </div>
         </div>
 
