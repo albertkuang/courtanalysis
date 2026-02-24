@@ -226,84 +226,97 @@ def get_college_roster(auth_info, club_id, gender):
     if auth_info.get('token'):
         headers['Authorization'] = f"Bearer {auth_info['token']}"
         
-    params = {
-        'top': 100, # Large enough to catch potential members
-        'skip': 0,
-        'gender': 'M' if gender == 'M' else 'F',
-        'utrType': 'verified',
-        'clubId': club_id
-    }
+    roster = []
+    skip = 0
+    batch_size = 100
+    current_year = 2025 # 2024-25 season seniors graduate 2025
     
-    try:
-        response = requests.get("https://app.utrsports.net/api/v2/search/players", params=params, headers=headers, cookies=auth_info.get('cookies'))
-        if response.status_code != 200:
-            return []
-            
-        data = response.json()
-        hits = data.get('hits', [])
+    while True:
+        params = {
+            'top': batch_size,
+            'skip': skip,
+            'gender': 'M' if gender == 'M' else 'F',
+            'utrType': 'verified',
+            'clubId': club_id
+        }
         
-        roster = []
-        target_gender = 'Male' if gender == 'M' else 'F'
-        current_year = 2025 # 2024-25 season seniors graduate 2025
-        
-        for hit in hits:
-            m = hit.get('source', hit)
+        try:
+            response = requests.get("https://app.utrsports.net/api/v2/search/players", params=params, headers=headers, cookies=auth_info.get('cookies'))
+            if response.status_code != 200:
+                break
+                
+            data = response.json()
+            hits = data.get('hits', [])
             
-            # 1. Filtering for active collegiate roster
-            # Active players MUST have playerCollegeDetails or a gradYear in the future
-            col_details = m.get('playerCollegeDetails')
-            is_active = False
+            if not hits:
+                break
             
-            if col_details:
-                # If they have details, they are almost certainly active/committed
-                # We check gradYear if available to filter out extremely old ones (though usually they are removed)
-                gy_str = col_details.get('gradYear')
-                if gy_str:
-                    try:
-                        gy = int(gy_str.split('-')[0])
-                        if gy >= current_year:
+            for hit in hits:
+                m = hit.get('source', hit)
+                
+                # 1. Filtering for active collegiate roster
+                # Active players MUST have playerCollegeDetails or a gradYear in the future
+                col_details = m.get('playerCollegeDetails')
+                is_active = False
+                
+                if col_details:
+                    # If they have details, they are almost certainly active/committed
+                    # We check gradYear if available to filter out extremely old ones (though usually they are removed)
+                    gy_str = col_details.get('gradYear')
+                    if gy_str:
+                        try:
+                            gy = int(gy_str.split('-')[0])
+                            if gy >= current_year:
+                                is_active = True
+                        except:
                             is_active = True
-                    except:
+                    else:
                         is_active = True
-                else:
-                    is_active = True
+                
+                # Additional heuristic: If no details but gradYear is reasonably future
+                # But be careful, many high schoolers have gradYear 2026/27 but aren't in college yet.
+                # However, if they are in a college CLUB roster, and have gradYear 2025/26/27/28, they are likely the players.
+                grad_year = m.get('gradYear')
+                if not is_active and grad_year:
+                    try:
+                        gy = int(grad_year)
+                        if current_year <= gy <= current_year + 4:
+                            is_active = True
+                    except: pass
+
+                if not is_active:
+                    continue
+
+                # 3. UTR Check - Real roster players have ratings
+                utr = m.get('singlesUtr', 0) or 0
+                d_utr = m.get('doublesUtr', 0) or 0
+                
+                if utr == 0 and d_utr == 0:
+                    continue
+
+                # Basic player info
+                roster.append({
+                    'id': m.get('id'),
+                    'name': m.get('displayName') or f"{m.get('firstName')} {m.get('lastName')}",
+                    'gradYear': grad_year,
+                    'utr': utr,
+                    'doublesUtr': d_utr,
+                    'gender': gender
+                })
             
-            # Additional heuristic: If no details but gradYear is reasonably future
-            # But be careful, many high schoolers have gradYear 2026/27 but aren't in college yet.
-            # However, if they are in a college CLUB roster, and have gradYear 2025/26/27/28, they are likely the players.
-            grad_year = m.get('gradYear')
-            if not is_active and grad_year:
-                try:
-                    gy = int(grad_year)
-                    if current_year <= gy <= current_year + 4:
-                        is_active = True
-                except: pass
-
-            if not is_active:
-                continue
-
-            # 3. UTR Check - Real roster players have ratings
-            utr = m.get('singlesUtr', 0) or 0
-            d_utr = m.get('doublesUtr', 0) or 0
+            if len(hits) < batch_size:
+                break
+                
+            skip += batch_size
+            time.sleep(0.2) # Polite delay
             
-            if utr == 0 and d_utr == 0:
-                continue
-
-            # Basic player info
-            roster.append({
-                'id': m.get('id'),
-                'name': m.get('displayName') or f"{m.get('firstName')} {m.get('lastName')}",
-                'gradYear': grad_year,
-                'utr': utr,
-                'doublesUtr': d_utr,
-                'gender': gender
-            })
+        except Exception as e:
+            print(f"Error fetching page for {club_id}: {e}")
+            break
             
-        return roster
+    return roster
 
-    except Exception as e:
-        print(f"Error fetching roster for call {club_id}: {e}")
-        return []
+
 
 # ============================================
 # EXTRACT & FETCH DETAILED METRICS

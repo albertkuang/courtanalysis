@@ -158,6 +158,7 @@ def extract_player(source):
         'ageRange': age_range,
         'location': (source.get('location') or {}).get('display') or source.get('city') or '',
         'nationality': source.get('nationality'),
+        'gender': 'M' if source.get('gender') == 'Male' else 'F' if source.get('gender') == 'Female' else source.get('gender'),
         'proRank': pro_rank,
         'college': college,
         'profileUrl': f"https://app.utrsports.net/profiles/{source.get('id')}",
@@ -195,6 +196,18 @@ def fetch_player_metrics(auth_info, player):
     try:
         # 1. Fetch ALL Results (last 12 months) for metrics
         results_url = f"https://app.utrsports.net/api/v1/player/{player['id']}/results"
+
+        # 1b. Fetch V2 Profile for Birth Date
+        try:
+            v2_url = f"https://app.utrsports.net/api/v2/player/{player['id']}"
+            v2_res = requests.get(v2_url, headers=headers, cookies=auth_info.get('cookies'))
+            if v2_res.status_code == 200:
+                v2_data = v2_res.json()
+                player['birthDate'] = v2_data.get('birthDate')
+                # Always prefer V2 profile age as it is more accurate than search index
+                if v2_data.get('age'):
+                    player['rawAge'] = v2_data.get('age')
+        except: pass
         
         # Counters for all metrics
         all_wins = 0
@@ -577,10 +590,13 @@ def fetch_player_metrics(auth_info, player):
                 'name': player.get('name'),
                 'college': player.get('college'),
                 'country': player.get('nationality'),
-                'gender': PARAMS['GENDER'], # Scraper runs for one gender at a time
+                'country': player.get('nationality'),
+                'gender': player.get('gender') or PARAMS['GENDER'], # Use detected gender, fallback to param
                 'utr_singles': player.get('utr'),
                 'utr_doubles': player.get('doublesUtr'),
+                'utr_doubles': player.get('doublesUtr'),
                 'age': player.get('rawAge'),
+                'birth_date': player.get('birthDate'),
                 'location': player.get('location'),
                 'pro_rank': player.get('proRank'),
                 'age_group': player.get('ageRange'),
@@ -628,7 +644,7 @@ def main():
             'query': PARAMS['PLAYER'],
             'top': 20
         }
-        if PARAMS['GENDER'] and PARAMS['GENDER'] in ['M', 'F']:
+        if PARAMS['GENDER'] and PARAMS['GENDER'] in ['M', 'F'] and '--gender' in sys.argv:
              filters['gender'] = PARAMS['GENDER']
              
         results = search_players(auth_info, filters)

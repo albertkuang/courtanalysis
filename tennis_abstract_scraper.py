@@ -23,6 +23,8 @@ MCP_ATP_MATCHES = f"{GITHUB_MCP_BASE}/charting-m-matches.csv"
 MCP_WTA_MATCHES = f"{GITHUB_MCP_BASE}/charting-w-matches.csv"
 MCP_ATP_OVERVIEW = f"{GITHUB_MCP_BASE}/charting-m-stats-Overview.csv"
 MCP_WTA_OVERVIEW = f"{GITHUB_MCP_BASE}/charting-w-stats-Overview.csv"
+MCP_ATP_POINTS = f"{GITHUB_MCP_BASE}/charting-m-points-2020s.csv"
+MCP_WTA_POINTS = f"{GITHUB_MCP_BASE}/charting-w-points-2020s.csv"
 
 
 def get_player_url(player_name, gender='F'):
@@ -357,6 +359,82 @@ def fetch_player_charting_stats(player_name, gender='F'):
     
     print(f"Found stats from {player_stats['matchCount']} charted matches")
     return player_stats
+
+
+def download_file(url, filename):
+    """Download a file with progress indication."""
+    print(f"Downloading {url} to {filename}...")
+    try:
+        with requests.get(url, stream=True) as r:
+            r.raise_for_status()
+            total_length = r.headers.get('content-length')
+            
+            with open(filename, 'wb') as f:
+                if total_length is None: # no content length header
+                    f.write(r.content)
+                else:
+                    dl = 0
+                    total_length = int(total_length)
+                    for chunk in r.iter_content(chunk_size=8192): 
+                        if chunk: 
+                            dl += len(chunk)
+                            f.write(chunk)
+                            done = int(50 * dl / total_length)
+                            sys.stdout.write("\r[%s%s]" % ('=' * done, ' ' * (50-done)) )    
+                            sys.stdout.flush()
+        print("\nDownload complete.")
+        return True
+    except Exception as e:
+        print(f"Error downloading file: {e}")
+        return False
+
+
+def get_match_points(match_id, gender='F'):
+    """
+    Get point-by-point data for a specific match.
+    Downloads the points CSV if not present.
+    """
+    # TODO: Logic to select 2010s vs 2020s based on match ID if needed.
+    # For now defaulting to 2020s as configured in constants.
+    filename = "charting-w-points-2020s.csv" if gender.upper() == 'F' else "charting-m-points-2020s.csv"
+    url = MCP_WTA_POINTS if gender.upper() == 'F' else MCP_ATP_POINTS
+    
+    # Check if file exists
+    import os
+    if not os.path.exists(filename):
+        print(f"Points file not found. Downloading (this may take a while)...")
+        if not download_file(url, filename):
+            return None
+            
+    points = []
+    print(f"Scanning {filename} for match {match_id}...")
+    
+    try:
+        with open(filename, 'r', encoding='utf-8', errors='replace') as f:
+            # Skip header? Or read it?
+            header = f.readline().strip().split(',')
+            
+            # Simple scan
+            for line in f:
+                if line.startswith(match_id):
+                    # Found a point for this match
+                    values = line.strip().split(',')
+                    point = {}
+                    # Map values based on assumed header or index
+                    # Usually: match_id, Pt, Set1, Set2, Gm1, Gm2, Pts, GmW, SetW, SetL, Server, Rcv, Svr, Ret, Rally, RalLen, Winner, Err, Notes...
+                    # We'll just return raw values mapped to header if possible, or basic dict
+                    if len(values) == len(header):
+                        point = dict(zip(header, values))
+                    else:
+                        # Fallback for mismatched columns
+                        point = {'raw': values}
+                    points.append(point)
+                    
+        print(f"Found {len(points)} points for match {match_id}")
+        return points
+    except Exception as e:
+        print(f"Error reading points file: {e}")
+        return None
 
 
 def output_json(data, filename=None):

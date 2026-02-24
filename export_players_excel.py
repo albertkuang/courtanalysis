@@ -289,11 +289,15 @@ def get_filtered_players(conn, country, category, gender, count, name_filter, mi
     if category == 'junior':
         # Include confirmed juniors (age <= 18) 
         # OR include if age_group suggests junior (e.g. U14, U16, U18, or ranges like 15-16)
-        # OR include if age is missing and UTR is < 14.0 (heuristic to exclude adult pros)
+        # OR include if age is missing and UTR is low (heuristic based on gender)
         query += """ AND ( 
             (age IS NOT NULL AND age <= 18) OR 
             (age_group IS NOT NULL AND (age_group LIKE 'U%' OR age_group LIKE '1_-1_' OR age_group LIKE '%Junior%')) OR
-            (age IS NULL AND age_group IS NULL AND utr_singles < 14.0)
+            (age IS NULL AND age_group IS NULL AND (
+                (gender = 'F' AND utr_singles < 11.5) OR
+                (gender = 'M' AND utr_singles < 13.5) OR
+                (gender IS NULL AND utr_singles < 13.0)
+            ))
         )"""
         
         # Heuristic: If age is missing to confirm, exclude those with active College (likely adults)
@@ -302,7 +306,17 @@ def get_filtered_players(conn, country, category, gender, count, name_filter, mi
         # Include confirmed college players (active college name is present)
         query += " AND (college IS NOT NULL AND college != '-' AND college NOT LIKE '%Recruiting%')"
     elif category == 'adult':
-        query += " AND (age IS NULL OR age > 18)"
+        # Exclude those captured by the Junior heuristic above
+        query += """ AND (
+            (age IS NOT NULL AND age > 18) OR
+            (age IS NULL AND (
+                age_group IS NULL AND NOT (
+                        (gender = 'F' AND utr_singles < 11.5) OR
+                        (gender = 'M' AND utr_singles < 13.5) OR
+                        (gender IS NULL AND utr_singles < 13.0)
+                )
+            ))
+        )"""
     
     query += " ORDER BY utr_singles DESC"
     
